@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Script Board</title>
+  <style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+.topbar{
+  display:flex; gap:12px; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid #ddd; position:sticky; top:0; background:#fff;
+  flex-wrap: wrap;
+}
+.brand{ font-weight:700; }
+.actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.sep{ width:1px; height:26px; background:#ddd; margin:0 6px; }
+
+button, .fileBtn{
+  border:1px solid #ccc; background:#fff; padding:8px 10px; border-radius:10px;
+  cursor:pointer; font-size:14px;
+}
+button.primary{ border-color:#333; }
+button.danger{ border-color:#c33; color:#c33; }
+button.gdocs{ border-color:#4285f4; color:#4285f4; }
+button.gdocs:hover:not(:disabled){ background:#4285f4; color:#fff; }
+button:disabled{ opacity:.5; cursor:not-allowed; }
+
+.fileBtn{ display:inline-flex; align-items:center; gap:8px; }
+.fileBtn input{ display:none; }
+
+.user-info {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #666;
+}
+.user-info img {
+  width: 24px; height: 24px; border-radius: 50%;
+}
+.user-info button {
+  padding: 4px 8px; font-size: 12px;
+}
+
+.layout{
+  display:grid; grid-template-columns: 1fr 380px;
+  min-height: calc(100vh - 58px);
+}
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+}
+.board{
+  padding:14px;
+  display:flex; gap:12px; align-items:flex-start;
+  overflow:auto;
+}
+.act{
+  width: 320px; min-width: 320px;
+  border:1px solid #ddd; border-radius:14px; background:#fafafa;
+  padding:10px;
+}
+.actHead{
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  margin-bottom:8px;
+}
+.actTitle{ font-weight:700; }
+.actHead button{ padding:6px 8px; border-radius:10px; }
+
+.scenes{ display:flex; flex-direction:column; gap:8px; min-height:40px; }
+.scene{
+  border:1px solid #ddd; background:#fff; border-radius:12px;
+  padding:10px; cursor:pointer;
+}
+.scene .small{ font-size:12px; opacity:.7; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scene.selected{ border-color:#333; }
+
+.editor{
+  border-left:1px solid #ddd; background:#fff; padding:14px;
+}
+.editorHead{ margin-bottom:10px; }
+.editorTitle{ font-weight:800; margin-bottom:4px; }
+.muted{ opacity:.7; font-size:13px; }
+
+.editorBody label{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+input, textarea{
+  border:1px solid #ccc; border-radius:10px; padding:10px; font-size:14px; width:100%;
+}
+.editorMeta{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+
+/* Modal for setup instructions */
+.modal-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center; align-items: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: #fff; border-radius: 16px; padding: 24px;
+  max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+.modal h2 { margin-top: 0; }
+.modal code {
+  background: #f5f5f5; padding: 2px 6px; border-radius: 4px;
+  font-size: 13px;
+}
+.modal pre {
+  background: #f5f5f5; padding: 12px; border-radius: 8px;
+  overflow-x: auto; font-size: 13px;
+}
+.modal ol { padding-left: 20px; }
+.modal li { margin-bottom: 8px; }
+.modal input {
+  width: 100%; margin: 8px 0;
+}
+.modal .btn-row {
+  display: flex; gap: 8px; margin-top: 16px;
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #333; color: #fff; padding: 12px 20px; border-radius: 10px;
+  z-index: 1001; display: none;
+}
+.toast.show { display: block; }
+.toast.success { background: #2e7d32; }
+.toast.error { background: #c62828; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎭 Script Board</div>
+
+    <div class="actions">
+      <button id="addActBtn">+ Acte</button>
+      <button id="addSceneBtn" class="primary" disabled>+ Scene</button>
+
+      <span class="sep"></span>
+
+      <button id="exportBtn">Export JSON</button>
+      <button id="exportDocxBtn">📄 Download .docx</button>
+      <button id="saveToDriveBtn" class="gdocs">📁 Opslaan in Drive</button>
+      
+      <span class="sep"></span>
+      
+      <label class="fileBtn">
+        Import JSON
+        <input id="importInput" type="file" accept="application/json" />
+      </label>
+      <button id="resetBtn" class="danger">Reset</button>
+    </div>
+
+    <div id="userInfo" class="user-info" style="display:none;">
+      <img id="userAvatar" src="" alt="" />
+      <span id="userName"></span>
+      <button id="signOutBtn">Uitloggen</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board" id="board"></section>
+
+    <aside class="editor">
+      <div class="editorHead">
+        <div class="editorTitle">Editor</div>
+        <div id="selectedPath" class="muted">Selecteer een scene…</div>
+      </div>
+
+      <div class="editorBody">
+        <label>
+          Titel
+          <input id="sceneTitle" type="text" placeholder="Bijv. Markt in Agrabah" disabled />
+        </label>
+
+        <label>
+          Scene-tekst
+          <textarea id="sceneText" rows="14" placeholder="Schrijf hier de scene…" disabled></textarea>
+        </label>
+
+        <div class="editorMeta">
+          <button id="deleteSceneBtn" class="danger" disabled>Scene verwijderen</button>
+          <div id="saveHint" class="muted">Autosave staat aan.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Setup Modal -->
+  <div id="setupModal" class="modal-overlay">
+    <div class="modal">
+      <h2>🔧 Google Drive Setup</h2>
+      <p>Om bestanden in Google Drive op te slaan, moet je eenmalig een Google Cloud project aanmaken:</p>
+      
+      <ol>
+        <li>Ga naar <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></li>
+        <li>Maak een nieuw project aan (of selecteer een bestaand project)</li>
+        <li>Klik op <strong>"+ CREATE CREDENTIALS"</strong> → <strong>"OAuth client ID"</strong></li>
+        <li>Kies <strong>"Web application"</strong> als type</li>
+        <li>Voeg bij <strong>"Authorized JavaScript origins"</strong> toe:
+          <pre id="originUrl"></pre>
+        </li>
+        <li>Klik op <strong>"CREATE"</strong> en kopieer de <strong>Client ID</strong></li>
+        <li>Ga naar <strong>"OAuth consent screen"</strong> en configureer:
+          <ul>
+            <li>User type: <strong>External</strong></li>
+            <li>Voeg je eigen e-mail toe als test user</li>
+          </ul>
+        </li>
+        <li>Ga naar <strong>"Enabled APIs"</strong> en activeer <strong>Google Drive API</strong></li>
+      </ol>
+
+      <label>
+        <strong>Plak hier je Client ID:</strong>
+        <input id="clientIdInput" type="text" placeholder="123456789-abc123.apps.googleusercontent.com" />
+      </label>
+
+      <div class="btn-row">
+        <button id="saveClientIdBtn" class="primary">Opslaan</button>
+        <button id="cancelSetupBtn">Annuleren</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+// ======= Storage & IDs =======
+const STORAGE_KEY = "scriptboard:v1";
+const CLIENT_ID_KEY = "scriptboard:clientId";
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ======= Toast =======
+function showToast(message, type = "") {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.className = "toast show " + type;
+  setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+// ======= State Management =======
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) return JSON.parse(raw);
+
+  return {
+    acts: [
+      {
+        id: "act1",
+        title: "Acte 1",
+        scenes: [
+          { id: "s1", title: "Opening – Markt", text: "Aladdin probeert een brood te stelen..." },
+          { id: "s2", title: "Jasmijn ontsnapt", text: "Jasmijn sluipt het paleis uit..." }
+        ]
+      },
+      {
+        id: "act2",
+        title: "Acte 2",
+        scenes: [{ id: "s3", title: "De grot", text: "De ingang sluit achter hem..." }]
+      }
+    ]
+  };
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+let state = loadState();
+
+// ======= DOM refs =======
+const boardEl = document.getElementById("board");
+const addActBtn = document.getElementById("addActBtn");
+const addSceneBtn = document.getElementById("addSceneBtn");
+const exportBtn = document.getElementById("exportBtn");
+const exportDocxBtn = document.getElementById("exportDocxBtn");
+const saveToDriveBtn = document.getElementById("saveToDriveBtn");
+const importInput = document.getElementById("importInput");
+const resetBtn = document.getElementById("resetBtn");
+const selectedPathEl = document.getElementById("selectedPath");
+const sceneTitleEl = document.getElementById("sceneTitle");
+const sceneTextEl = document.getElementById("sceneText");
+const deleteSceneBtn = document.getElementById("deleteSceneBtn");
+
+// User info elements
+const userInfoEl = document.getElementById("userInfo");
+const userAvatarEl = document.getElementById("userAvatar");
+const userNameEl = document.getElementById("userName");
+const signOutBtn = document.getElementById("signOutBtn");
+
+// Setup modal elements
+const setupModal = document.getElementById("setupModal");
+const originUrlEl = document.getElementById("originUrl");
+const clientIdInput = document.getElementById("clientIdInput");
+const saveClientIdBtn = document.getElementById("saveClientIdBtn");
+const cancelSetupBtn = document.getElementById("cancelSetupBtn");
+
+let selected = { actId: null, sceneId: null };
+
+// ======= Google Auth State =======
+let tokenClient = null;
+let accessToken = null;
+let currentUser = null;
+
+// ======= Helpers =======
+function findAct(actId) {
+  return state.acts.find(a => a.id === actId) || null;
+}
+function findScene(actId, sceneId) {
+  const act = findAct(actId);
+  if (!act) return null;
+  return act.scenes.find(s => s.id === sceneId) || null;
+}
+function actTitleOrDefault(n) {
+  return `Acte ${n}`;
+}
+
+function setSelected(actId, sceneId) {
+  selected = { actId, sceneId };
+  const scene = actId && sceneId ? findScene(actId, sceneId) : null;
+  const act = actId ? findAct(actId) : null;
+  const hasSelection = !!scene;
+
+  addSceneBtn.disabled = state.acts.length === 0;
+  sceneTitleEl.disabled = !hasSelection;
+  sceneTextEl.disabled = !hasSelection;
+  deleteSceneBtn.disabled = !hasSelection;
+
+  if (!hasSelection) {
+    selectedPathEl.textContent = "Selecteer een scene…";
+    sceneTitleEl.value = "";
+    sceneTextEl.value = "";
+    render();
+    return;
+  }
+
+  selectedPathEl.textContent = `${act?.title ?? "Acte"} → ${scene.title}`;
+  sceneTitleEl.value = scene.title;
+  sceneTextEl.value = scene.text;
+  render();
+}
+
+// ======= Drag & Drop =======
+function rebuildFromDOM() {
+  const flat = new Map();
+  state.acts.forEach(a => a.scenes.forEach(s => flat.set(s.id, s)));
+  const nextActs = state.acts.map(a => ({ ...a, scenes: [] }));
+
+  nextActs.forEach(a => {
+    const col = document.getElementById(`scenes-${a.id}`);
+    const ids = col ? [...col.querySelectorAll(".scene")].map(el => el.dataset.sceneId) : [];
+    a.scenes = ids.map(id => flat.get(id)).filter(Boolean);
+  });
+
+  state.acts = nextActs;
+  saveState();
+
+  if (selected.sceneId) {
+    const newAct = state.acts.find(a => a.scenes.some(s => s.id === selected.sceneId));
+    if (newAct) selected.actId = newAct.id;
+  }
+}
+
+// ======= Render =======
+function render() {
+  boardEl.innerHTML = "";
+
+  state.acts.forEach(act => {
+    const actEl = document.createElement("div");
+    actEl.className = "act";
+    actEl.dataset.actId = act.id;
+
+    const head = document.createElement("div");
+    head.className = "actHead";
+
+    const title = document.createElement("div");
+    title.className = "actTitle";
+    title.textContent = act.title;
+
+    const headBtns = document.createElement("div");
+    headBtns.style.display = "flex";
+    headBtns.style.gap = "6px";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.textContent = "Hernoem";
+    renameBtn.onclick = () => {
+      const newTitle = prompt("Nieuwe titel voor acte:", act.title);
+      if (newTitle && newTitle.trim()) {
+        act.title = newTitle.trim();
+        saveState();
+        render();
+        if (selected.sceneId && selected.actId === act.id) {
+          const sc = findScene(selected.actId, selected.sceneId);
+          if (sc) selectedPathEl.textContent = `${act.title} → ${sc.title}`;
+        }
+      }
+    };
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.textContent = "Verwijder";
+    delBtn.onclick = () => {
+      if (!confirm(`Acte verwijderen: "${act.title}"? (scenes gaan ook weg)`)) return;
+      state.acts = state.acts.filter(a => a.id !== act.id);
+      if (selected.actId === act.id) setSelected(null, null);
+      saveState();
+      render();
+    };
+
+    headBtns.append(renameBtn, delBtn);
+    head.append(title, headBtns);
+
+    const scenesEl = document.createElement("div");
+    scenesEl.className = "scenes";
+    scenesEl.id = `scenes-${act.id}`;
+
+    act.scenes.forEach(scene => {
+      const sceneEl = document.createElement("div");
+      sceneEl.className = "scene";
+      sceneEl.dataset.sceneId = scene.id;
+
+      if (selected.actId === act.id && selected.sceneId === scene.id) {
+        sceneEl.classList.add("selected");
+      }
+
+      const t = document.createElement("div");
+      t.textContent = scene.title;
+
+      const small = document.createElement("div");
+      small.className = "small";
+      small.textContent = (scene.text || "").replace(/\s+/g, " ").slice(0, 90);
+
+      sceneEl.append(t, small);
+      sceneEl.onclick = () => setSelected(act.id, scene.id);
+      scenesEl.appendChild(sceneEl);
+    });
+
+    actEl.append(head, scenesEl);
+    boardEl.appendChild(actEl);
+  });
+
+  state.acts.forEach(act => {
+    const col = document.getElementById(`scenes-${act.id}`);
+    if (!col) return;
+    if (col._sortable) col._sortable.destroy();
+
+    col._sortable = new Sortable(col, {
+      group: "scenes",
+      animation: 150,
+      onEnd: () => {
+        rebuildFromDOM();
+        render();
+      }
+    });
+  });
+
+  addSceneBtn.disabled = state.acts.length === 0;
+}
+
+// ======= Actions =======
+addActBtn.onclick = () => {
+  const actId = uid();
+  const title = actTitleOrDefault(state.acts.length + 1);
+  state.acts.push({ id: actId, title, scenes: [] });
+  saveState();
+  selected.actId = actId;
+  selected.sceneId = null;
+  render();
+};
+
+addSceneBtn.onclick = () => {
+  if (state.acts.length === 0) return;
+  const actId = selected.actId && findAct(selected.actId) ? selected.actId : state.acts[0].id;
+  const act = findAct(actId);
+  const sceneId = uid();
+  const scene = { id: sceneId, title: "Nieuwe scene", text: "" };
+  act.scenes.push(scene);
+  saveState();
+  render();
+  setSelected(actId, sceneId);
+};
+
+sceneTitleEl.addEventListener("input", () => {
+  const scene = findScene(selected.actId, selected.sceneId);
+  if (!scene) return;
+  scene.title = sceneTitleEl.value;
+  saveState();
+  render();
+});
+
+sceneTextEl.addEventListener("input", () => {
+  const scene = findScene(selected.actId, selected.sceneId);
+  if (!scene) return;
+  scene.text = sceneTextEl.value;
+  saveState();
+  render();
+});
+
+deleteSceneBtn.onclick = () => {
+  const act = findAct(selected.actId);
+  const scene = findScene(selected.actId, selected.sceneId);
+  if (!act || !scene) return;
+  if (!confirm(`Scene verwijderen: "${scene.title}"?`)) return;
+  act.scenes = act.scenes.filter(s => s.id !== scene.id);
+  saveState();
+  setSelected(null, null);
+  render();
+};
+
+exportBtn.onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "scriptboard.json";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ======= Generate DOCX Buffer =======
+async function generateDocxBlob() {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } = docx;
+
+  const children = [];
+
+  children.push(new Paragraph({
+    children: [new TextRun({ text: "🎭 Script Board", bold: true, size: 48 })],
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 400 }
+  }));
+
+  const now = new Date().toLocaleDateString("nl-NL", { 
+    year: "numeric", month: "long", day: "numeric" 
+  });
+  children.push(new Paragraph({
+    children: [new TextRun({ text: `Geëxporteerd op ${now}`, italics: true, size: 22, color: "666666" })],
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 600 }
+  }));
+
+  state.acts.forEach((act, actIndex) => {
+    if (actIndex > 0) {
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+    }
+
+    children.push(new Paragraph({
+      children: [new TextRun({ text: act.title, bold: true, size: 36 })],
+      heading: HeadingLevel.HEADING_1,
+      spacing: { before: 200, after: 200 }
+    }));
+
+    act.scenes.forEach((scene, sceneIndex) => {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `Scene ${sceneIndex + 1}: ${scene.title}`, bold: true, size: 28 })],
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 300, after: 100 }
+      }));
+
+      const textLines = (scene.text || "(Geen tekst)").split(/\n+/);
+      textLines.forEach(line => {
+        if (line.trim()) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: line, size: 24 })],
+            spacing: { after: 120 }
+          }));
+        }
+      });
+
+      children.push(new Paragraph({ spacing: { after: 200 } }));
+    });
+
+    if (act.scenes.length === 0) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: "(Geen scenes in deze acte)", italics: true, color: "999999", size: 22 })],
+        spacing: { after: 200 }
+      }));
+    }
+  });
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: "Arial", size: 24 }
+        }
+      }
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+        }
+      },
+      children
+    }]
+  });
+
+  return await Packer.toBlob(doc);
+}
+
+// ======= Download DOCX =======
+exportDocxBtn.onclick = async () => {
+  const blob = await generateDocxBlob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "scriptboard.docx";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ======= Google Drive Integration =======
+
+function getClientId() {
+  return localStorage.getItem(CLIENT_ID_KEY);
+}
+
+function setClientId(id) {
+  localStorage.setItem(CLIENT_ID_KEY, id);
+}
+
+function showSetupModal() {
+  originUrlEl.textContent = window.location.origin || window.location.protocol + "//" + window.location.host;
+  clientIdInput.value = getClientId() || "";
+  setupModal.classList.add("show");
+}
+
+function hideSetupModal() {
+  setupModal.classList.remove("show");
+}
+
+saveClientIdBtn.onclick = () => {
+  const clientId = clientIdInput.value.trim();
+  if (!clientId) {
+    alert("Vul een Client ID in");
+    return;
+  }
+  setClientId(clientId);
+  hideSetupModal();
+  initGoogleAuth();
+  showToast("Client ID opgeslagen! Klik opnieuw op 'Opslaan in Drive'", "success");
+};
+
+cancelSetupBtn.onclick = hideSetupModal;
+
+function initGoogleAuth() {
+  const clientId = getClientId();
+  if (!clientId || typeof google === "undefined") return;
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile",
+    callback: (response) => {
+      if (response.error) {
+        console.error("Auth error:", response);
+        showToast("Inloggen mislukt: " + response.error, "error");
+        return;
+      }
+      accessToken = response.access_token;
+      fetchUserInfo();
+      uploadToDrive();
+    }
+  });
+}
+
+async function fetchUserInfo() {
+  if (!accessToken) return;
+
+  try {
+    const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const user = await res.json();
+    currentUser = user;
+
+    userAvatarEl.src = user.picture || "";
+    userNameEl.textContent = user.name || user.email || "";
+    userInfoEl.style.display = "flex";
+  } catch (e) {
+    console.error("Failed to fetch user info:", e);
+  }
+}
+
+signOutBtn.onclick = () => {
+  accessToken = null;
+  currentUser = null;
+  userInfoEl.style.display = "none";
+  if (typeof google !== "undefined" && google.accounts) {
+    google.accounts.oauth2.revoke(accessToken, () => {});
+  }
+  showToast("Uitgelogd", "success");
+};
+
+saveToDriveBtn.onclick = async () => {
+  const clientId = getClientId();
+
+  if (!clientId) {
+    showSetupModal();
+    return;
+  }
+
+  if (!tokenClient) {
+    initGoogleAuth();
+  }
+
+  if (!accessToken) {
+    // Request access token (will trigger login popup)
+    tokenClient.requestAccessToken({ prompt: "consent" });
+    return;
+  }
+
+  // Already have token, upload directly
+  await uploadToDrive();
+};
+
+async function uploadToDrive() {
+  if (!accessToken) {
+    showToast("Niet ingelogd", "error");
+    return;
+  }
+
+  saveToDriveBtn.disabled = true;
+  saveToDriveBtn.textContent = "⏳ Uploaden...";
+
+  try {
+    const blob = await generateDocxBlob();
+    const filename = `ScriptBoard_${new Date().toISOString().slice(0, 10)}.docx`;
+
+    // Create file metadata
+    const metadata = {
+      name: filename,
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    };
+
+    // Use multipart upload
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+    form.append("file", blob);
+
+    const response = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: form
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || "Upload mislukt");
+    }
+
+    const file = await response.json();
+    showToast(`✅ Opgeslagen als "${file.name}"`, "success");
+
+    // Open file in new tab
+    if (file.webViewLink) {
+      window.open(file.webViewLink, "_blank");
+    }
+  } catch (e) {
+    console.error("Upload error:", e);
+    showToast("Upload mislukt: " + e.message, "error");
+  } finally {
+    saveToDriveBtn.disabled = false;
+    saveToDriveBtn.textContent = "📁 Opslaan in Drive";
+  }
+}
+
+importInput.onchange = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  const data = JSON.parse(text);
+
+  if (!data || !Array.isArray(data.acts)) {
+    alert("Ongeldig bestand: verwacht { acts: [...] }");
+    return;
+  }
+  state = data;
+  saveState();
+  setSelected(null, null);
+  render();
+  importInput.value = "";
+};
+
+resetBtn.onclick = () => {
+  if (!confirm("Alles wissen en opnieuw beginnen?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = loadState();
+  setSelected(null, null);
+  render();
+};
+
+// ======= Init =======
+render();
+if (state.acts.length) selected.actId = state.acts[0].id;
+
+// Initialize Google Auth when library loads
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    if (getClientId()) {
+      initGoogleAuth();
+    }
+  }, 500);
+});
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+.topbar{
+  display:flex; gap:12px; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid #ddd; position:sticky; top:0; background:#fff;
+}
+.brand{ font-weight:700; }
+.actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.sep{ width:1px; height:26px; background:#ddd; margin:0 6px; }
+
+button, .fileBtn{
+  border:1px solid #ccc; background:#fff; padding:8px 10px; border-radius:10px;
+  cursor:pointer; font-size:14px;
+}
+button.primary{ border-color:#333; }
+button.danger{ border-color:#c33; color:#c33; }
+button:disabled{ opacity:.5; cursor:not-allowed; }
+
+.fileBtn{ display:inline-flex; align-items:center; gap:8px; }
+.fileBtn input{ display:none; }
+
+.layout{
+  display:grid; grid-template-columns: 1fr 380px;
+  min-height: calc(100vh - 58px);
+}
+.board{
+  padding:14px;
+  display:flex; gap:12px; align-items:flex-start;
+  overflow:auto;
+}
+.act{
+  width: 320px; min-width: 320px;
+  border:1px solid #ddd; border-radius:14px; background:#fafafa;
+  padding:10px;
+}
+.actHead{
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  margin-bottom:8px;
+}
+.actTitle{ font-weight:700; }
+.actHead button{ padding:6px 8px; border-radius:10px; }
+
+.scenes{ display:flex; flex-direction:column; gap:8px; min-height:40px; }
+.scene{
+  border:1px solid #ddd; background:#fff; border-radius:12px;
+  padding:10px; cursor:pointer;
+}
+.scene .small{ font-size:12px; opacity:.7; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scene.selected{ border-color:#333; }
+
+.editor{
+  border-left:1px solid #ddd; background:#fff; padding:14px;
+}
+.editorHead{ margin-bottom:10px; }
+.editorTitle{ font-weight:800; margin-bottom:4px; }
+.muted{ opacity:.7; font-size:13px; }
+
+.editorBody label{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+input, textarea{
+  border:1px solid #ccc; border-radius:10px; padding:10px; font-size:14px; width:100%;
+}
+.editorMeta{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
