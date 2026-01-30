@@ -232,7 +232,18 @@ input, textarea{
 // ======= Storage & IDs =======
 const STORAGE_KEY = "scriptboard:v1";
 const CLIENT_ID_KEY = "scriptboard:clientId";
+const VERSION_KEY = "scriptboard:version";
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+function getVersion() {
+  return parseInt(localStorage.getItem(VERSION_KEY) || "0", 10);
+}
+
+function incrementVersion() {
+  const newVersion = getVersion() + 1;
+  localStorage.setItem(VERSION_KEY, newVersion.toString());
+  return newVersion;
+}
 
 // ======= Toast =======
 function showToast(message, type = "") {
@@ -729,7 +740,8 @@ async function uploadToDrive() {
 
   try {
     const blob = await generateDocxBlob();
-    const filename = `ScriptBoard_${new Date().toISOString().slice(0, 10)}.docx`;
+    const version = incrementVersion();
+    const filename = `ScriptBoard_v${version}.docx`;
 
     // Create file metadata
     const metadata = {
