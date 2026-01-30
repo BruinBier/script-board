@@ -349,7 +349,12 @@ function setSelected(actId, sceneId) {
     return;
   }
 
-  selectedPathEl.textContent = `${act?.title ?? "Acte"} → ${scene.title}`;
+  // Bereken scene nummer (positie in acte)
+  const sceneIndex = act.scenes.findIndex(s => s.id === sceneId);
+  const sceneNumber = sceneIndex + 1;
+  const displayTitle = scene.title ? `Scene ${sceneNumber}. ${scene.title}` : `Scene ${sceneNumber}.`;
+  
+  selectedPathEl.textContent = `${act?.title ?? "Acte"} → ${displayTitle}`;
   sceneTitleEl.value = scene.title;
   sceneTextEl.value = scene.text;
   render();
@@ -429,7 +434,7 @@ function render() {
     scenesEl.className = "scenes";
     scenesEl.id = `scenes-${act.id}`;
 
-    act.scenes.forEach(scene => {
+    act.scenes.forEach((scene, sceneIndex) => {
       const sceneEl = document.createElement("div");
       sceneEl.className = "scene";
       sceneEl.dataset.sceneId = scene.id;
@@ -439,7 +444,9 @@ function render() {
       }
 
       const t = document.createElement("div");
-      t.textContent = scene.title;
+      const sceneNumber = sceneIndex + 1;
+      const displayTitle = scene.title ? `Scene ${sceneNumber}. ${scene.title}` : `Scene ${sceneNumber}.`;
+      t.textContent = displayTitle;
 
       const small = document.createElement("div");
       small.className = "small";
@@ -488,7 +495,7 @@ addSceneBtn.onclick = () => {
   const actId = selected.actId && findAct(selected.actId) ? selected.actId : state.acts[0].id;
   const act = findAct(actId);
   const sceneId = uid();
-  const scene = { id: sceneId, title: "Nieuwe scene", text: "" };
+  const scene = { id: sceneId, title: "", text: "" };
   act.scenes.push(scene);
   saveState();
   render();
@@ -565,8 +572,11 @@ async function generateDocxBlob() {
     }));
 
     act.scenes.forEach((scene, sceneIndex) => {
+      const sceneNumber = sceneIndex + 1;
+      const displayTitle = scene.title ? `Scene ${sceneNumber}. ${scene.title}` : `Scene ${sceneNumber}.`;
+      
       children.push(new Paragraph({
-        children: [new TextRun({ text: `Scene ${sceneIndex + 1}: ${scene.title}`, bold: true, size: 28 })],
+        children: [new TextRun({ text: displayTitle, bold: true, size: 28 })],
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 100 }
       }));
