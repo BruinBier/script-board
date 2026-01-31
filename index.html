@@ -547,26 +547,34 @@ async function fetchUserInfo() {
 
 // ======= Google Drive Operations =======
 async function findDataFile() {
-  // Zoek OVERAL naar het bestand (eigen drive, gedeelde mappen, submappen)
-  const query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`;
+  console.log("Zoeken naar scriptboard-data.json...");
   
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,owners,shared,ownedByMe)&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true`,
+  // EERST zoeken in 'Gedeeld met mij'
+  let query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false and sharedWithMe=true`;
+  let res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,ownedByMe)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const data = await res.json();
+  let data = await res.json();
   
-  console.log("Gevonden bestanden:", data.files);
+  console.log("Gedeelde bestanden gevonden:", data.files);
   
   if (data.files && data.files.length > 0) {
-    // Geef voorkeur aan bestanden die NIET van mij zijn (gedeeld bestand)
-    const sharedFile = data.files.find(f => f.ownedByMe === false);
-    if (sharedFile) {
-      console.log("Gebruik gedeeld bestand:", sharedFile);
-      return sharedFile.id;
-    }
-    // Anders gebruik eerste gevonden bestand
-    console.log("Gebruik eigen bestand:", data.files[0]);
+    console.log("Gebruik gedeeld bestand:", data.files[0]);
+    return data.files[0].id;
+  }
+  
+  // DAN zoeken in eigen drive
+  query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`;
+  res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,ownedByMe)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  data = await res.json();
+  
+  console.log("Eigen bestanden gevonden:", data.files);
+  
+  if (data.files && data.files.length > 0) {
     return data.files[0].id;
   }
   
