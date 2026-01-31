@@ -98,6 +98,93 @@ input, textarea{
 }
 .editorMeta{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
 
+/* Rich text editor */
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.editor-toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: #f5f5f5;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  flex-wrap: wrap;
+}
+.editor-toolbar button {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 28px;
+}
+.editor-toolbar button:hover {
+  background: #e8e8e8;
+}
+.editor-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.toolbar-sep {
+  width: 1px;
+  background: #ddd;
+  margin: 0 4px;
+}
+.rich-editor {
+  border: 1px solid #ccc;
+  border-radius: 0 0 10px 10px;
+  padding: 10px;
+  min-height: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.rich-editor:focus {
+  outline: none;
+  border-color: #4285f4;
+}
+.rich-editor[contenteditable="false"] {
+  background: #f9f9f9;
+  color: #999;
+}
+.rich-editor:empty:before {
+  content: attr(placeholder);
+  color: #999;
+}
+.rich-editor h1 {
+  font-size: 1.5em;
+  margin: 0.5em 0 0.3em 0;
+  font-weight: bold;
+}
+.rich-editor h2 {
+  font-size: 1.3em;
+  margin: 0.5em 0 0.3em 0;
+  font-weight: bold;
+}
+.rich-editor h3 {
+  font-size: 1.1em;
+  margin: 0.5em 0 0.3em 0;
+  font-weight: bold;
+}
+.rich-editor p {
+  margin: 0.5em 0;
+}
+.rich-editor ul, .rich-editor ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.rich-editor li {
+  margin: 0.2em 0;
+}
+
 /* Login screen */
 .login-screen {
   display: flex;
@@ -274,10 +361,21 @@ input, textarea{
             <input id="sceneTitle" type="text" placeholder="Bijv. Markt in Agrabah" disabled />
           </label>
 
-          <label>
-            Scene-tekst
-            <textarea id="sceneText" rows="14" placeholder="Schrijf hier de scene…" disabled></textarea>
-          </label>
+          <div class="preview-container">
+            <div class="editor-toolbar" id="editorToolbar">
+              <button type="button" data-cmd="bold" title="Vet (Ctrl+B)"><b>B</b></button>
+              <button type="button" data-cmd="italic" title="Cursief (Ctrl+I)"><i>I</i></button>
+              <button type="button" data-cmd="underline" title="Onderstrepen (Ctrl+U)"><u>U</u></button>
+              <span class="toolbar-sep"></span>
+              <button type="button" data-cmd="h1" title="Kop 1">H1</button>
+              <button type="button" data-cmd="h2" title="Kop 2">H2</button>
+              <button type="button" data-cmd="h3" title="Kop 3">H3</button>
+              <span class="toolbar-sep"></span>
+              <button type="button" data-cmd="insertUnorderedList" title="Opsomming">•</button>
+              <button type="button" data-cmd="insertOrderedList" title="Genummerde lijst">1.</button>
+            </div>
+            <div class="rich-editor" id="sceneText" contenteditable="false" placeholder="Plak of typ hier de scene-tekst..."></div>
+          </div>
 
           <div class="editorMeta">
             <button id="deleteSceneBtn" class="danger" disabled>Scene verwijderen</button>
@@ -369,6 +467,7 @@ const selectedPathEl = document.getElementById("selectedPath");
 const sceneTitleEl = document.getElementById("sceneTitle");
 const sceneTextEl = document.getElementById("sceneText");
 const deleteSceneBtn = document.getElementById("deleteSceneBtn");
+const editorToolbar = document.getElementById("editorToolbar");
 
 const userInfoEl = document.getElementById("userInfo");
 const userAvatarEl = document.getElementById("userAvatar");
@@ -393,6 +492,30 @@ function showToast(message, type = "") {
   toast.className = "toast show " + type;
   setTimeout(() => toast.classList.remove("show"), 3000);
 }
+
+// ======= Rich Text Editor =======
+function initToolbar() {
+  editorToolbar.querySelectorAll('button').forEach(btn => {
+    btn.onmousedown = (e) => {
+      e.preventDefault(); // Prevent focus loss
+      const cmd = btn.dataset.cmd;
+      
+      if (cmd === 'h1' || cmd === 'h2' || cmd === 'h3') {
+        document.execCommand('formatBlock', false, cmd);
+      } else {
+        document.execCommand(cmd, false, null);
+      }
+    };
+  });
+}
+
+function setToolbarEnabled(enabled) {
+  editorToolbar.querySelectorAll('button').forEach(btn => {
+    btn.disabled = !enabled;
+  });
+}
+
+initToolbar();
 
 // ======= Loading =======
 function showLoading(text = "Laden...") {
@@ -665,13 +788,14 @@ function setSelected(actId, sceneId) {
 
   addSceneBtn.disabled = state.acts.length === 0;
   sceneTitleEl.disabled = !hasSelection;
-  sceneTextEl.disabled = !hasSelection;
+  sceneTextEl.contentEditable = hasSelection ? "true" : "false";
   deleteSceneBtn.disabled = !hasSelection;
+  setToolbarEnabled(hasSelection);
 
   if (!hasSelection) {
     selectedPathEl.textContent = "Selecteer een scene…";
     sceneTitleEl.value = "";
-    sceneTextEl.value = "";
+    sceneTextEl.innerHTML = "";
     render();
     return;
   }
@@ -682,7 +806,7 @@ function setSelected(actId, sceneId) {
   
   selectedPathEl.textContent = `${act?.title ?? "Acte"} → ${displayTitle}`;
   sceneTitleEl.value = scene.title;
-  sceneTextEl.value = scene.text;
+  sceneTextEl.innerHTML = scene.text || "";
   render();
 }
 
@@ -844,7 +968,7 @@ sceneTitleEl.addEventListener("input", () => {
 sceneTextEl.addEventListener("input", () => {
   const scene = findScene(selected.actId, selected.sceneId);
   if (!scene) return;
-  scene.text = sceneTextEl.value;
+  scene.text = sceneTextEl.innerHTML;
   scheduleSave();
   // Don't re-render for text changes (performance)
 });
@@ -861,6 +985,159 @@ deleteSceneBtn.onclick = () => {
 };
 
 // ======= DOCX Export =======
+function parseHtmlForDocx(html, docx) {
+  const { Paragraph, TextRun, HeadingLevel } = docx;
+  const paragraphs = [];
+  
+  if (!html || html.trim() === '' || html === '<br>') {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: "(Geen tekst)", italics: true, color: "999999", size: 22 })]
+    }));
+    return paragraphs;
+  }
+  
+  // Create a temporary div to parse HTML
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  
+  function processNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (text.trim()) {
+        return [new TextRun({ text: text, size: 24 })];
+      }
+      return [];
+    }
+    
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    
+    const tag = node.tagName.toLowerCase();
+    
+    // Headers
+    if (tag === 'h1') {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: node.textContent, bold: true, size: 32 })],
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 280, after: 140 }
+      }));
+      return [];
+    }
+    if (tag === 'h2') {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: node.textContent, bold: true, size: 28 })],
+        heading: HeadingLevel.HEADING_3,
+        spacing: { before: 240, after: 120 }
+      }));
+      return [];
+    }
+    if (tag === 'h3') {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: node.textContent, bold: true, size: 26 })],
+        heading: HeadingLevel.HEADING_4,
+        spacing: { before: 200, after: 100 }
+      }));
+      return [];
+    }
+    
+    // Lists
+    if (tag === 'ul' || tag === 'ol') {
+      const items = node.querySelectorAll(':scope > li');
+      items.forEach((li, i) => {
+        const prefix = tag === 'ul' ? '• ' : `${i + 1}. `;
+        paragraphs.push(new Paragraph({
+          children: [new TextRun({ text: prefix + li.textContent, size: 24 })],
+          spacing: { after: 60 },
+          indent: { left: 720 }
+        }));
+      });
+      return [];
+    }
+    
+    // Paragraph or div
+    if (tag === 'p' || tag === 'div') {
+      const runs = [];
+      node.childNodes.forEach(child => {
+        runs.push(...processInlineNode(child));
+      });
+      if (runs.length > 0) {
+        paragraphs.push(new Paragraph({
+          children: runs,
+          spacing: { after: 120 }
+        }));
+      }
+      return [];
+    }
+    
+    // Line break
+    if (tag === 'br') {
+      return [];
+    }
+    
+    // Process children for other elements
+    const runs = [];
+    node.childNodes.forEach(child => {
+      runs.push(...processNode(child));
+    });
+    return runs;
+  }
+  
+  function processInlineNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (text) {
+        return [new TextRun({ text: text, size: 24 })];
+      }
+      return [];
+    }
+    
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    
+    const tag = node.tagName.toLowerCase();
+    const text = node.textContent;
+    
+    if (tag === 'strong' || tag === 'b') {
+      return [new TextRun({ text: text, bold: true, size: 24 })];
+    }
+    if (tag === 'em' || tag === 'i') {
+      return [new TextRun({ text: text, italics: true, size: 24 })];
+    }
+    if (tag === 'u') {
+      return [new TextRun({ text: text, underline: {}, size: 24 })];
+    }
+    if (tag === 'br') {
+      return [new TextRun({ text: '', break: 1 })];
+    }
+    
+    // Default: process children
+    const runs = [];
+    node.childNodes.forEach(child => {
+      runs.push(...processInlineNode(child));
+    });
+    return runs;
+  }
+  
+  // Process all top-level nodes
+  temp.childNodes.forEach(node => {
+    const runs = processNode(node);
+    if (runs.length > 0) {
+      paragraphs.push(new Paragraph({
+        children: runs,
+        spacing: { after: 120 }
+      }));
+    }
+  });
+  
+  // If no paragraphs were created, create one from the text content
+  if (paragraphs.length === 0 && temp.textContent.trim()) {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: temp.textContent, size: 24 })],
+      spacing: { after: 120 }
+    }));
+  }
+  
+  return paragraphs;
+}
+
 async function generateDocxBlob() {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } = docx;
 
@@ -902,15 +1179,9 @@ async function generateDocxBlob() {
         spacing: { before: 300, after: 100 }
       }));
 
-      const textLines = (scene.text || "(Geen tekst)").split(/\n+/);
-      textLines.forEach(line => {
-        if (line.trim()) {
-          children.push(new Paragraph({
-            children: [new TextRun({ text: line, size: 24 })],
-            spacing: { after: 120 }
-          }));
-        }
-      });
+      // Parse HTML content
+      const contentParagraphs = parseHtmlForDocx(scene.text, docx);
+      children.push(...contentParagraphs);
 
       children.push(new Paragraph({ spacing: { after: 200 } }));
     });
