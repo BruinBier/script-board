@@ -240,6 +240,11 @@ input, textarea{
         <span class="sep"></span>
 
         <button id="exportDocxBtn">📄 Download .docx</button>
+        <button id="exportJsonBtn">💾 Backup JSON</button>
+        <label class="fileBtn">
+          📂 Import JSON
+          <input id="importInput" type="file" accept="application/json" />
+        </label>
         
         <span class="sep"></span>
         
@@ -354,6 +359,8 @@ const boardEl = document.getElementById("board");
 const addActBtn = document.getElementById("addActBtn");
 const addSceneBtn = document.getElementById("addSceneBtn");
 const exportDocxBtn = document.getElementById("exportDocxBtn");
+const exportJsonBtn = document.getElementById("exportJsonBtn");
+const importInput = document.getElementById("importInput");
 const syncStatus = document.getElementById("syncStatus");
 
 const selectedPathEl = document.getElementById("selectedPath");
@@ -505,7 +512,12 @@ async function onLoginSuccess() {
   await fetchUserInfo();
   
   // Load data from Drive
-  await loadFromDrive();
+  const success = await loadFromDrive();
+  
+  if (!success) {
+    hideLoading();
+    return;
+  }
   
   // Show main app
   loginScreen.style.display = "none";
@@ -534,14 +546,34 @@ async function fetchUserInfo() {
 
 // ======= Google Drive Operations =======
 async function findDataFile() {
-  // Zoek in eigen drive EN gedeelde bestanden
-  const query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`;
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,owners)&includeItemsFromAllDrives=true&supportsAllDrives=true`,
+  // Zoek eerst in eigen drive
+  let query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`;
+  let res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,owners,shared)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  const data = await res.json();
-  return data.files && data.files.length > 0 ? data.files[0].id : null;
+  let data = await res.json();
+  
+  if (data.files && data.files.length > 0) {
+    // Geef voorkeur aan gedeelde bestanden (van iemand anders)
+    const sharedFile = data.files.find(f => f.shared === true);
+    if (sharedFile) return sharedFile.id;
+    return data.files[0].id;
+  }
+  
+  // Zoek in 'Gedeeld met mij'
+  query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false and sharedWithMe=true`;
+  res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  data = await res.json();
+  
+  if (data.files && data.files.length > 0) {
+    return data.files[0].id;
+  }
+  
+  return null;
 }
 
 async function loadFromDrive() {
@@ -561,28 +593,43 @@ async function loadFromDrive() {
         state = data;
         docxVersion = data.docxVersion || 0;
       }
+      setSyncStatus("saved");
     } else {
-      // No file found, create new with default data
-      state = {
-        acts: [
-          {
-            id: "act1",
-            title: "Acte 1",
-            scenes: [
-              { id: "s1", title: "Opening", text: "" }
-            ]
-          }
-        ],
-        docxVersion: 0
-      };
-      await saveToDrive();
+      // Geen bestand gevonden - vraag of gebruiker nieuw wil aanmaken
+      const createNew = confirm(
+        "Geen Script Board data gevonden.\n\n" +
+        "• Als je toegang zou moeten hebben tot een gedeeld bestand, vraag de eigenaar om het te delen.\n\n" +
+        "• Klik OK om een nieuw leeg script te beginnen.\n" +
+        "• Klik Annuleren om uit te loggen."
+      );
+      
+      if (createNew) {
+        state = {
+          acts: [
+            {
+              id: "act1",
+              title: "Acte 1",
+              scenes: [
+                { id: "s1", title: "", text: "" }
+              ]
+            }
+          ],
+          docxVersion: 0
+        };
+        await saveToDrive();
+        setSyncStatus("saved");
+      } else {
+        // Log uit
+        signOutBtn.click();
+        return false;
+      }
     }
-    
-    setSyncStatus("saved");
+    return true;
   } catch (e) {
     console.error("Load error:", e);
     setSyncStatus("error");
     showToast("Fout bij laden: " + e.message, "error");
+    return false;
   }
 }
 
@@ -958,6 +1005,51 @@ exportDocxBtn.onclick = async () => {
   URL.revokeObjectURL(url);
   
   showToast(`Gedownload als ScriptBoard_v${docxVersion}.docx`, "success");
+};
+
+// ======= JSON Export/Import =======
+exportJsonBtn.onclick = () => {
+  const content = JSON.stringify({ ...state, docxVersion }, null, 2);
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `scriptboard-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("Backup gedownload!", "success");
+};
+
+importInput.onchange = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    
+    if (!data || !Array.isArray(data.acts)) {
+      alert("Ongeldig bestand: verwacht { acts: [...] }");
+      return;
+    }
+    
+    if (!confirm("Weet je zeker dat je de huidige data wilt vervangen met deze backup?")) {
+      return;
+    }
+    
+    state = { acts: data.acts };
+    docxVersion = data.docxVersion || 0;
+    
+    await saveToDrive();
+    setSelected(null, null);
+    render();
+    
+    showToast("Data geïmporteerd en opgeslagen!", "success");
+  } catch (err) {
+    alert("Fout bij importeren: " + err.message);
+  }
+  
+  importInput.value = "";
 };
 
 // ======= Init =======
