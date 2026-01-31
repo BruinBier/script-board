@@ -333,6 +333,7 @@ input, textarea{
           📂 Import JSON
           <input id="importInput" type="file" accept="application/json" />
         </label>
+        <button id="restoreBackupBtn" title="Herstel van lokale backup">🔄 Herstel</button>
         
         <span class="sep"></span>
         
@@ -461,6 +462,7 @@ const addSceneBtn = document.getElementById("addSceneBtn");
 const exportDocxBtn = document.getElementById("exportDocxBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
 const importInput = document.getElementById("importInput");
+const restoreBackupBtn = document.getElementById("restoreBackupBtn");
 const syncStatus = document.getElementById("syncStatus");
 
 const selectedPathEl = document.getElementById("selectedPath");
@@ -718,55 +720,78 @@ async function saveToDrive() {
     const content = JSON.stringify({ ...state, docxVersion }, null, 2);
     const blob = new Blob([content], { type: "application/json" });
 
-    if (dataFileId) {
-      // Update existing file
-      await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${dataFileId}?uploadType=media`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: blob
-        }
-      );
-    } else {
-      // Create new file
-      const metadata = {
-        name: DATA_FILENAME,
-        mimeType: "application/json"
-      };
+    // Save to main file
+    const response = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${dataFileId}?uploadType=media`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: blob
+      }
+    );
 
-      const form = new FormData();
-      form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-      form.append("file", blob);
-
-      const res = await fetch(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          body: form
-        }
-      );
-      const data = await res.json();
-      dataFileId = data.id;
+    if (!response.ok) {
+      throw new Error("Opslaan mislukt: " + response.status);
     }
 
+    // Also save local backup in localStorage as fallback
+    localStorage.setItem("scriptboard-local-backup", content);
+    localStorage.setItem("scriptboard-backup-time", new Date().toISOString());
+
     setSyncStatus("saved");
+    console.log("Opgeslagen om", new Date().toLocaleTimeString());
   } catch (e) {
     console.error("Save error:", e);
     setSyncStatus("error");
     showToast("Opslaan mislukt: " + e.message, "error");
+    
+    // Save locally as backup when cloud fails
+    const content = JSON.stringify({ ...state, docxVersion }, null, 2);
+    localStorage.setItem("scriptboard-local-backup", content);
+    localStorage.setItem("scriptboard-backup-time", new Date().toISOString());
+    showToast("Lokale backup gemaakt", "success");
   }
 }
 
-// Debounced save (waits 1 second after last change)
+// Debounced save (waits 2 seconds after last change for more reliable saving)
 function scheduleSave() {
   if (saveTimeout) clearTimeout(saveTimeout);
   setSyncStatus("saving");
-  saveTimeout = setTimeout(() => saveToDrive(), 1000);
+  saveTimeout = setTimeout(() => saveToDrive(), 2000);
+}
+
+// Check for local backup on load
+function checkLocalBackup() {
+  const backup = localStorage.getItem("scriptboard-local-backup");
+  const backupTime = localStorage.getItem("scriptboard-backup-time");
+  if (backup && backupTime) {
+    const time = new Date(backupTime).toLocaleString("nl-NL");
+    console.log("Lokale backup gevonden van:", time);
+  }
+}
+
+// Restore from local backup
+function restoreLocalBackup() {
+  const backup = localStorage.getItem("scriptboard-local-backup");
+  if (backup) {
+    try {
+      const data = JSON.parse(backup);
+      if (data && Array.isArray(data.acts)) {
+        state = data;
+        docxVersion = data.docxVersion || 0;
+        render();
+        saveToDrive();
+        showToast("Hersteld van lokale backup!", "success");
+        return true;
+      }
+    } catch (e) {
+      console.error("Backup restore error:", e);
+    }
+  }
+  return false;
 }
 
 // ======= Helpers =======
@@ -1238,7 +1263,10 @@ exportJsonBtn.onclick = () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `scriptboard-backup-${new Date().toISOString().slice(0,10)}.json`;
+  const now = new Date();
+  const datum = now.toISOString().slice(0,10);
+  const tijd = now.toTimeString().slice(0,5).replace(":", "-");
+  a.download = `scriptboard-backup-${datum}_${tijd}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showToast("Backup gedownload!", "success");
@@ -1274,6 +1302,21 @@ importInput.onchange = async (e) => {
   }
   
   importInput.value = "";
+};
+
+restoreBackupBtn.onclick = () => {
+  const backupTime = localStorage.getItem("scriptboard-backup-time");
+  if (!backupTime) {
+    alert("Geen lokale backup gevonden.");
+    return;
+  }
+  
+  const time = new Date(backupTime).toLocaleString("nl-NL");
+  if (confirm(`Lokale backup gevonden van ${time}.\n\nWil je deze herstellen? Dit overschrijft de huidige data.`)) {
+    if (restoreLocalBackup()) {
+      setSelected(null, null);
+    }
+  }
 };
 
 // ======= Init =======
