@@ -328,12 +328,9 @@ input, textarea{
         <span class="sep"></span>
 
         <button id="exportDocxBtn">📄 Download .docx</button>
-        <button id="exportJsonBtn">💾 Backup JSON</button>
-        <label class="fileBtn">
-          📂 Import JSON
-          <input id="importInput" type="file" accept="application/json" />
-        </label>
-        <button id="restoreBackupBtn" title="Herstel van lokale backup">🔄 Herstel</button>
+        <button id="exportJsonBtn">💾 Backup → Drive</button>
+        <button id="importJsonBtn">📂 Herstel ← Drive</button>
+        <button id="restoreBackupBtn" title="Herstel van lokale backup">🔄 Lokaal</button>
         
         <span class="sep"></span>
         
@@ -461,7 +458,7 @@ const addActBtn = document.getElementById("addActBtn");
 const addSceneBtn = document.getElementById("addSceneBtn");
 const exportDocxBtn = document.getElementById("exportDocxBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
-const importInput = document.getElementById("importInput");
+const importJsonBtn = document.getElementById("importJsonBtn");
 const restoreBackupBtn = document.getElementById("restoreBackupBtn");
 const syncStatus = document.getElementById("syncStatus");
 
@@ -1256,52 +1253,156 @@ exportDocxBtn.onclick = async () => {
   showToast(`Gedownload als ScriptBoard_v${docxVersion}.docx`, "success");
 };
 
-// ======= JSON Export/Import =======
-exportJsonBtn.onclick = () => {
-  const content = JSON.stringify({ ...state, docxVersion }, null, 2);
-  const blob = new Blob([content], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const now = new Date();
-  const datum = now.toISOString().slice(0,10);
-  const tijd = now.toTimeString().slice(0,5).replace(":", "-");
-  a.download = `scriptboard-backup-${datum}_${tijd}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast("Backup gedownload!", "success");
+// ======= JSON Backup to Drive / Restore from Drive =======
+
+// Find the parent folder of the data file
+async function findBackupFolder() {
+  // Get parent folder of the main data file
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${SHARED_FILE_ID}?fields=parents`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const data = await res.json();
+  return data.parents ? data.parents[0] : null;
+}
+
+exportJsonBtn.onclick = async () => {
+  if (!accessToken) {
+    showToast("Niet ingelogd", "error");
+    return;
+  }
+
+  exportJsonBtn.disabled = true;
+  exportJsonBtn.textContent = "⏳ Opslaan...";
+
+  try {
+    const folderId = await findBackupFolder();
+    
+    const now = new Date();
+    const datum = now.toISOString().slice(0, 10);
+    const tijd = now.toTimeString().slice(0, 5).replace(":", "-");
+    const filename = `scriptboard-backup-${datum}_${tijd}.json`;
+    
+    const content = JSON.stringify({ ...state, docxVersion }, null, 2);
+    const blob = new Blob([content], { type: "application/json" });
+
+    const metadata = {
+      name: filename,
+      mimeType: "application/json"
+    };
+    
+    // Save in same folder as main file
+    if (folderId) {
+      metadata.parents = [folderId];
+    }
+
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+    form.append("file", blob);
+
+    const res = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: form
+      }
+    );
+
+    if (!res.ok) throw new Error("Upload mislukt");
+
+    const file = await res.json();
+    showToast(`✅ Backup opgeslagen: ${file.name}`, "success");
+  } catch (e) {
+    console.error("Backup error:", e);
+    showToast("Backup mislukt: " + e.message, "error");
+  } finally {
+    exportJsonBtn.disabled = false;
+    exportJsonBtn.textContent = "💾 Backup → Drive";
+  }
 };
 
-importInput.onchange = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  
+importJsonBtn.onclick = async () => {
+  if (!accessToken) {
+    showToast("Niet ingelogd", "error");
+    return;
+  }
+
+  importJsonBtn.disabled = true;
+  importJsonBtn.textContent = "⏳ Zoeken...";
+
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    const folderId = await findBackupFolder();
     
-    if (!data || !Array.isArray(data.acts)) {
-      alert("Ongeldig bestand: verwacht { acts: [...] }");
-      return;
+    // Search for backup files in the folder, sorted by newest first
+    let query = `name contains 'scriptboard-backup' and mimeType='application/json' and trashed=false`;
+    if (folderId) {
+      query += ` and '${folderId}' in parents`;
     }
     
-    if (!confirm("Weet je zeker dat je de huidige data wilt vervangen met deze backup?")) {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&orderBy=createdTime desc&pageSize=10&fields=files(id,name,createdTime)`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await res.json();
+
+    if (!data.files || data.files.length === 0) {
+      alert("Geen backups gevonden in Google Drive.");
       return;
     }
+
+    // Show list of available backups
+    let message = "Beschikbare backups:\n\n";
+    data.files.forEach((file, i) => {
+      const date = new Date(file.createdTime).toLocaleString("nl-NL");
+      message += `${i + 1}. ${file.name} (${date})\n`;
+    });
+    message += "\nTyp het nummer van de backup die je wilt herstellen:";
+
+    const choice = prompt(message);
+    if (!choice) return;
+
+    const index = parseInt(choice) - 1;
+    if (isNaN(index) || index < 0 || index >= data.files.length) {
+      alert("Ongeldig nummer");
+      return;
+    }
+
+    const selectedFile = data.files[index];
     
-    state = { acts: data.acts };
-    docxVersion = data.docxVersion || 0;
+    if (!confirm(`Backup "${selectedFile.name}" herstellen?\n\nDit overschrijft de huidige data.`)) {
+      return;
+    }
+
+    // Download the selected backup
+    importJsonBtn.textContent = "⏳ Herstellen...";
     
+    const fileRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${selectedFile.id}?alt=media`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const backupData = await fileRes.json();
+
+    if (!backupData || !Array.isArray(backupData.acts)) {
+      alert("Ongeldig backup bestand");
+      return;
+    }
+
+    state = { acts: backupData.acts };
+    docxVersion = backupData.docxVersion || 0;
+
     await saveToDrive();
     setSelected(null, null);
     render();
-    
-    showToast("Data geïmporteerd en opgeslagen!", "success");
-  } catch (err) {
-    alert("Fout bij importeren: " + err.message);
+
+    showToast(`✅ Hersteld van "${selectedFile.name}"`, "success");
+  } catch (e) {
+    console.error("Restore error:", e);
+    showToast("Herstellen mislukt: " + e.message, "error");
+  } finally {
+    importJsonBtn.disabled = false;
+    importJsonBtn.textContent = "📂 Herstel ← Drive";
   }
-  
-  importInput.value = "";
 };
 
 restoreBackupBtn.onclick = () => {
