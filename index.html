@@ -339,6 +339,7 @@ input, textarea{
 // ======= Constants =======
 const CLIENT_ID_KEY = "scriptboard:clientId";
 const DATA_FILENAME = "scriptboard-data.json";
+const SHARED_FILE_ID = "1ImUeFmttGaTMuTzHVFmrSTYuSWednPiH"; // Vaste file ID van Eccola's bestand
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 // ======= State =======
@@ -547,93 +548,40 @@ async function fetchUserInfo() {
 
 // ======= Google Drive Operations =======
 async function findDataFile() {
-  console.log("Zoeken naar scriptboard-data.json...");
-  
-  // EERST zoeken in 'Gedeeld met mij'
-  let query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false and sharedWithMe=true`;
-  let res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,ownedByMe)`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  let data = await res.json();
-  
-  console.log("Gedeelde bestanden gevonden:", data.files);
-  
-  if (data.files && data.files.length > 0) {
-    console.log("Gebruik gedeeld bestand:", data.files[0]);
-    return data.files[0].id;
-  }
-  
-  // DAN zoeken in eigen drive
-  query = `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`;
-  res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,ownedByMe)`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  data = await res.json();
-  
-  console.log("Eigen bestanden gevonden:", data.files);
-  
-  if (data.files && data.files.length > 0) {
-    return data.files[0].id;
-  }
-  
-  return null;
+  // Gebruik altijd het gedeelde bestand van Eccola
+  console.log("Gebruik vast bestand ID:", SHARED_FILE_ID);
+  return SHARED_FILE_ID;
 }
 
 async function loadFromDrive() {
   try {
-    // Find existing data file
-    dataFileId = await findDataFile();
+    // Gebruik altijd het gedeelde bestand
+    dataFileId = SHARED_FILE_ID;
     
-    if (dataFileId) {
-      // Download file content
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${dataFileId}?alt=media`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const data = await res.json();
-      
-      if (data && Array.isArray(data.acts)) {
-        state = data;
-        docxVersion = data.docxVersion || 0;
-      }
-      setSyncStatus("saved");
-    } else {
-      // Geen bestand gevonden - vraag of gebruiker nieuw wil aanmaken
-      const createNew = confirm(
-        "Geen Script Board data gevonden.\n\n" +
-        "• Als je toegang zou moeten hebben tot een gedeeld bestand, vraag de eigenaar om het te delen.\n\n" +
-        "• Klik OK om een nieuw leeg script te beginnen.\n" +
-        "• Klik Annuleren om uit te loggen."
-      );
-      
-      if (createNew) {
-        state = {
-          acts: [
-            {
-              id: "act1",
-              title: "Acte 1",
-              scenes: [
-                { id: "s1", title: "", text: "" }
-              ]
-            }
-          ],
-          docxVersion: 0
-        };
-        await saveToDrive();
-        setSyncStatus("saved");
-      } else {
-        // Log uit
-        signOutBtn.click();
-        return false;
-      }
+    // Download file content
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${dataFileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    
+    if (!res.ok) {
+      throw new Error("Geen toegang tot het bestand. Vraag de eigenaar om het te delen.");
     }
+    
+    const data = await res.json();
+    
+    if (data && Array.isArray(data.acts)) {
+      state = data;
+      docxVersion = data.docxVersion || 0;
+    }
+    
+    setSyncStatus("saved");
     return true;
   } catch (e) {
     console.error("Load error:", e);
     setSyncStatus("error");
     showToast("Fout bij laden: " + e.message, "error");
+    alert("Kan het bestand niet laden.\n\nZorg dat het bestand is gedeeld met jouw Google account.");
     return false;
   }
 }
