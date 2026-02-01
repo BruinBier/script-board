@@ -516,6 +516,37 @@ function setToolbarEnabled(enabled) {
 
 initToolbar();
 
+// Paste handler - behoudt opmaak bij plakken
+sceneTextEl.addEventListener("paste", (e) => {
+  e.preventDefault();
+  
+  // Probeer eerst HTML te krijgen (behoud opmaak)
+  const html = e.clipboardData.getData("text/html");
+  
+  if (html) {
+    // Clean up de HTML - verwijder onnodige styling maar behoud structuur
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    
+    // Verwijder scripts en styles
+    temp.querySelectorAll("script, style, meta, link").forEach(el => el.remove());
+    
+    // Verwijder inline styles maar behoud structurele tags
+    temp.querySelectorAll("*").forEach(el => {
+      el.removeAttribute("style");
+      el.removeAttribute("class");
+      el.removeAttribute("id");
+    });
+    
+    // Plak de schone HTML
+    document.execCommand("insertHTML", false, temp.innerHTML);
+  } else {
+    // Fallback: plak als platte tekst
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  }
+});
+
 // ======= Loading =======
 function showLoading(text = "Laden...") {
   loadingText.textContent = text;
