@@ -331,6 +331,7 @@ input, textarea{
         <button id="exportJsonBtn">💾 Backup → Drive</button>
         <button id="importJsonBtn">📂 Herstel ← Drive</button>
         <button id="restoreBackupBtn" title="Herstel van lokale backup">🔄 Lokaal</button>
+        <button id="searchReplaceBtn" title="Zoek en vervang in alle scenes">🔍 Zoek/Vervang</button>
         
         <span class="sep"></span>
         
@@ -419,6 +420,39 @@ input, textarea{
     </div>
   </div>
 
+  <!-- Search & Replace Modal -->
+  <div id="searchReplaceModal" class="modal-overlay">
+    <div class="modal">
+      <h2>🔍 Zoek en vervang</h2>
+      <p>Vervangt in alle scenes (titels én teksten).</p>
+      
+      <label>
+        <strong>Zoek naar:</strong>
+        <input id="searchInput" type="text" placeholder="Bijv. Aladdin" />
+      </label>
+
+      <label style="margin-top:12px;">
+        <strong>Vervang door:</strong>
+        <input id="replaceInput" type="text" placeholder="Bijv. Ali" />
+      </label>
+
+      <div style="margin-top:12px;">
+        <label style="flex-direction:row; align-items:center; gap:8px;">
+          <input id="caseSensitive" type="checkbox" style="width:auto;" />
+          Hoofdlettergevoelig
+        </label>
+      </div>
+
+      <div id="searchResults" style="margin-top:12px; font-size:13px; color:#666;"></div>
+
+      <div class="btn-row">
+        <button id="doReplaceBtn" class="primary">Vervangen</button>
+        <button id="previewReplaceBtn">Voorbeeld</button>
+        <button id="cancelSearchBtn">Annuleren</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading Overlay -->
   <div id="loadingOverlay" class="loading-overlay">
     <div class="spinner"></div>
@@ -460,6 +494,7 @@ const exportDocxBtn = document.getElementById("exportDocxBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
 const importJsonBtn = document.getElementById("importJsonBtn");
 const restoreBackupBtn = document.getElementById("restoreBackupBtn");
+const searchReplaceBtn = document.getElementById("searchReplaceBtn");
 const syncStatus = document.getElementById("syncStatus");
 
 const selectedPathEl = document.getElementById("selectedPath");
@@ -1449,6 +1484,122 @@ restoreBackupBtn.onclick = () => {
       setSelected(null, null);
     }
   }
+};
+
+// ======= Zoek en Vervang =======
+const searchReplaceModal = document.getElementById("searchReplaceModal");
+const searchInputEl = document.getElementById("searchInput");
+const replaceInputEl = document.getElementById("replaceInput");
+const caseSensitiveEl = document.getElementById("caseSensitive");
+const searchResultsEl = document.getElementById("searchResults");
+const doReplaceBtn = document.getElementById("doReplaceBtn");
+const previewReplaceBtn = document.getElementById("previewReplaceBtn");
+const cancelSearchBtn = document.getElementById("cancelSearchBtn");
+
+searchReplaceBtn.onclick = () => {
+  searchInputEl.value = "";
+  replaceInputEl.value = "";
+  searchResultsEl.innerHTML = "";
+  searchReplaceModal.classList.add("show");
+  searchInputEl.focus();
+};
+
+cancelSearchBtn.onclick = () => {
+  searchReplaceModal.classList.remove("show");
+};
+
+function countMatches(searchFor, caseSensitive) {
+  let total = 0;
+  const flags = caseSensitive ? "g" : "gi";
+  const regex = new RegExp(searchFor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  
+  state.acts.forEach(act => {
+    act.scenes.forEach(scene => {
+      const titleMatches = (scene.title || "").match(regex);
+      // Strip HTML for counting text matches
+      const temp = document.createElement("div");
+      temp.innerHTML = scene.text || "";
+      const plainText = temp.textContent || "";
+      const textMatches = plainText.match(regex);
+      
+      total += (titleMatches ? titleMatches.length : 0);
+      total += (textMatches ? textMatches.length : 0);
+    });
+  });
+  
+  return total;
+}
+
+function replaceInHtml(html, searchFor, replaceWith, caseSensitive) {
+  // Replace text content without breaking HTML tags
+  const flags = caseSensitive ? "g" : "gi";
+  const regex = new RegExp(searchFor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  
+  // Split HTML into tags and text
+  const parts = html.split(/(<[^>]+>)/);
+  return parts.map(part => {
+    // Don't replace inside HTML tags
+    if (part.startsWith("<")) return part;
+    return part.replace(regex, replaceWith);
+  }).join("");
+}
+
+previewReplaceBtn.onclick = () => {
+  const searchFor = searchInputEl.value;
+  if (!searchFor) {
+    searchResultsEl.innerHTML = "Vul een zoekterm in.";
+    return;
+  }
+  
+  const caseSensitive = caseSensitiveEl.checked;
+  const count = countMatches(searchFor, caseSensitive);
+  
+  if (count === 0) {
+    searchResultsEl.innerHTML = `Geen resultaten gevonden voor "<strong>${searchFor}</strong>"`;
+  } else {
+    searchResultsEl.innerHTML = `<strong>${count}</strong> keer gevonden in alle scenes.`;
+  }
+};
+
+doReplaceBtn.onclick = () => {
+  const searchFor = searchInputEl.value;
+  const replaceWith = replaceInputEl.value;
+  const caseSensitive = caseSensitiveEl.checked;
+  
+  if (!searchFor) {
+    alert("Vul een zoekterm in.");
+    return;
+  }
+  
+  const count = countMatches(searchFor, caseSensitive);
+  
+  if (count === 0) {
+    alert(`Geen resultaten gevonden voor "${searchFor}"`);
+    return;
+  }
+  
+  if (!confirm(`${count} keer "${searchFor}" vervangen door "${replaceWith}"?`)) {
+    return;
+  }
+  
+  const flags = caseSensitive ? "g" : "gi";
+  const regex = new RegExp(searchFor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  
+  state.acts.forEach(act => {
+    act.scenes.forEach(scene => {
+      // Replace in title
+      scene.title = (scene.title || "").replace(regex, replaceWith);
+      // Replace in text (HTML content)
+      scene.text = replaceInHtml(scene.text || "", searchFor, replaceWith, caseSensitive);
+    });
+  });
+  
+  scheduleSave();
+  setSelected(selected.actId, selected.sceneId);
+  render();
+  
+  searchReplaceModal.classList.remove("show");
+  showToast(`✅ ${count} keer vervangen`, "success");
 };
 
 // ======= Init =======
