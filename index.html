@@ -994,7 +994,11 @@ function render() {
 
       const small = document.createElement("div");
       small.className = "small";
-      small.textContent = (scene.text || "").replace(/\s+/g, " ").slice(0, 90);
+      // Strip HTML tags voor preview
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = scene.text || "";
+      const plainText = tempDiv.textContent || tempDiv.innerText || "";
+      small.textContent = plainText.replace(/\s+/g, " ").trim().slice(0, 90);
 
       sceneEl.append(t, small);
       sceneEl.onclick = () => setSelected(act.id, scene.id);
