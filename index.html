@@ -1106,27 +1106,24 @@ function parseHtmlForDocx(html, docx) {
     
     const tag = node.tagName.toLowerCase();
     
-    // Headers
+    // Headers - zonder HeadingLevel om blauwe kleur te vermijden
     if (tag === 'h1') {
       paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: node.textContent, bold: true, size: 32 })],
-        heading: HeadingLevel.HEADING_2,
+        children: [new TextRun({ text: node.textContent, bold: true, size: 32, color: "000000" })],
         spacing: { before: 280, after: 140 }
       }));
       return [];
     }
     if (tag === 'h2') {
       paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: node.textContent, bold: true, size: 28 })],
-        heading: HeadingLevel.HEADING_3,
+        children: [new TextRun({ text: node.textContent, bold: true, size: 28, color: "000000" })],
         spacing: { before: 240, after: 120 }
       }));
       return [];
     }
     if (tag === 'h3') {
       paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: node.textContent, bold: true, size: 26 })],
-        heading: HeadingLevel.HEADING_4,
+        children: [new TextRun({ text: node.textContent, bold: true, size: 26, color: "000000" })],
         spacing: { before: 200, after: 100 }
       }));
       return [];
@@ -1138,7 +1135,7 @@ function parseHtmlForDocx(html, docx) {
       items.forEach((li, i) => {
         const prefix = tag === 'ul' ? '• ' : `${i + 1}. `;
         paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: prefix + li.textContent, size: 24 })],
+          children: [new TextRun({ text: prefix + li.textContent, size: 24, color: "000000" })],
           spacing: { after: 60 },
           indent: { left: 720 }
         }));
@@ -1178,7 +1175,7 @@ function parseHtmlForDocx(html, docx) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent;
       if (text) {
-        return [new TextRun({ text: text, size: 24 })];
+        return [new TextRun({ text: text, size: 24, color: "000000" })];
       }
       return [];
     }
@@ -1189,13 +1186,13 @@ function parseHtmlForDocx(html, docx) {
     const text = node.textContent;
     
     if (tag === 'strong' || tag === 'b') {
-      return [new TextRun({ text: text, bold: true, size: 24 })];
+      return [new TextRun({ text: text, bold: true, size: 24, color: "000000" })];
     }
     if (tag === 'em' || tag === 'i') {
-      return [new TextRun({ text: text, italics: true, size: 24 })];
+      return [new TextRun({ text: text, italics: true, size: 24, color: "000000" })];
     }
     if (tag === 'u') {
-      return [new TextRun({ text: text, underline: {}, size: 24 })];
+      return [new TextRun({ text: text, underline: {}, size: 24, color: "000000" })];
     }
     if (tag === 'br') {
       return [new TextRun({ text: '', break: 1 })];
@@ -1223,7 +1220,7 @@ function parseHtmlForDocx(html, docx) {
   // If no paragraphs were created, create one from the text content
   if (paragraphs.length === 0 && temp.textContent.trim()) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: temp.textContent, size: 24 })],
+      children: [new TextRun({ text: temp.textContent, size: 24, color: "000000" })],
       spacing: { after: 120 }
     }));
   }
@@ -1236,16 +1233,16 @@ async function generateDocxBlob() {
 
   const children = [];
 
-  // Titel: Aladdin en de wonderlamp (bold)
+  // Titel: Aladdin en de wonderlamp (bold, zwart)
   children.push(new Paragraph({
-    children: [new TextRun({ text: "Aladdin en de wonderlamp", bold: true, size: 56 })],
+    children: [new TextRun({ text: "Aladdin en de wonderlamp", bold: true, size: 56, color: "000000" })],
     alignment: AlignmentType.CENTER,
     spacing: { after: 120 }
   }));
 
-  // Subtitel: Muziektheater Eccola (niet bold)
+  // Subtitel: Muziektheater Eccola (niet bold, zwart)
   children.push(new Paragraph({
-    children: [new TextRun({ text: "Muziektheater Eccola", size: 28 })],
+    children: [new TextRun({ text: "Muziektheater Eccola", size: 28, color: "000000" })],
     alignment: AlignmentType.CENTER,
     spacing: { after: 400 }
   }));
@@ -1265,8 +1262,7 @@ async function generateDocxBlob() {
     }
 
     children.push(new Paragraph({
-      children: [new TextRun({ text: act.title, bold: true, size: 36 })],
-      heading: HeadingLevel.HEADING_1,
+      children: [new TextRun({ text: act.title, bold: true, size: 36, color: "000000" })],
       spacing: { before: 200, after: 200 }
     }));
 
@@ -1275,8 +1271,7 @@ async function generateDocxBlob() {
       const displayTitle = scene.title ? `Scene ${sceneNumber}. ${scene.title}` : `Scene ${sceneNumber}.`;
       
       children.push(new Paragraph({
-        children: [new TextRun({ text: displayTitle, bold: true, size: 28 })],
-        heading: HeadingLevel.HEADING_2,
+        children: [new TextRun({ text: displayTitle, bold: true, size: 28, color: "000000" })],
         spacing: { before: 300, after: 100 }
       }));
 
