@@ -55,16 +55,31 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .sync-status.offline { background: #eeeeee; color: #666; }
 
 .layout{
-  display:grid; grid-template-columns: 1fr 1fr;
+  display:flex;
   min-height: calc(100vh - 58px);
 }
 @media (max-width: 800px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { flex-direction: column; }
+  .layout .board { width: 100% !important; }
+  .layout .divider { display: none; }
+  .layout .editor { width: 100% !important; }
 }
 .board{
   padding:14px;
   display:flex; gap:12px; align-items:flex-start;
   overflow:auto;
+  flex: 1;
+  min-width: 300px;
+}
+.divider {
+  width: 6px;
+  background: #e0e0e0;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.divider:hover, .divider.dragging {
+  background: #4285f4;
 }
 .act{
   width: 320px; min-width: 320px;
@@ -87,7 +102,11 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .scene.selected{ border-color:#333; }
 
 .editor{
-  border-left:1px solid #ddd; background:#fff; padding:14px;
+  border-left: none; background:#fff; padding:14px;
+  width: 50%;
+  min-width: 300px;
+  flex-shrink: 0;
+  overflow: auto;
 }
 .editorHead{ margin-bottom:10px; }
 .editorTitle{ font-weight:800; margin-bottom:4px; }
@@ -349,7 +368,9 @@ input, textarea{
     <main class="layout">
       <section class="board" id="board"></section>
 
-      <aside class="editor">
+      <div class="divider" id="divider"></div>
+
+      <aside class="editor" id="editorPanel">
         <div class="editorHead">
           <div class="editorTitle">Editor</div>
           <div id="selectedPath" class="muted">Selecteer een scene…</div>
@@ -1621,6 +1642,50 @@ doReplaceBtn.onclick = () => {
   searchReplaceModal.classList.remove("show");
   showToast(`✅ ${count} keer vervangen`, "success");
 };
+
+// ======= Resizable Divider =======
+const divider = document.getElementById("divider");
+const editorPanel = document.getElementById("editorPanel");
+let isDragging = false;
+
+divider.addEventListener("mousedown", (e) => {
+  isDragging = true;
+  divider.classList.add("dragging");
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  e.preventDefault();
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!isDragging) return;
+  
+  const containerWidth = document.querySelector(".layout").offsetWidth;
+  const newEditorWidth = containerWidth - e.clientX;
+  const minWidth = 300;
+  const maxWidth = containerWidth - 350; // Leave space for acts
+  
+  if (newEditorWidth >= minWidth && newEditorWidth <= maxWidth) {
+    editorPanel.style.width = newEditorWidth + "px";
+  }
+});
+
+document.addEventListener("mouseup", () => {
+  if (isDragging) {
+    isDragging = false;
+    divider.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    
+    // Save preference
+    localStorage.setItem("scriptboard-editor-width", editorPanel.style.width);
+  }
+});
+
+// Restore saved width
+const savedWidth = localStorage.getItem("scriptboard-editor-width");
+if (savedWidth) {
+  editorPanel.style.width = savedWidth;
+}
 
 // ======= Init =======
 window.addEventListener("load", () => {
