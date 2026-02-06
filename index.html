@@ -1232,12 +1232,20 @@ function parseHtmlForDocx(html, docx) {
 }
 
 async function generateDocxBlob() {
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } = docx;
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, PageNumber } = docx;
 
   const children = [];
 
+  // Titel: Aladdin en de wonderlamp (bold)
   children.push(new Paragraph({
-    children: [new TextRun({ text: "🎭 Script Board", bold: true, size: 48 })],
+    children: [new TextRun({ text: "Aladdin en de wonderlamp", bold: true, size: 56 })],
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 120 }
+  }));
+
+  // Subtitel: Muziektheater Eccola (niet bold)
+  children.push(new Paragraph({
+    children: [new TextRun({ text: "Muziektheater Eccola", size: 28 })],
     alignment: AlignmentType.CENTER,
     spacing: { after: 400 }
   }));
@@ -1301,6 +1309,18 @@ async function generateDocxBlob() {
           size: { width: 11906, height: 16838 },
           margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
         }
+      },
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({ children: [PageNumber.CURRENT], size: 20 })
+              ]
+            })
+          ]
+        })
       },
       children
     }]
